@@ -1,91 +1,110 @@
-<?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/rootLayout"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@android:color/black"
-    android:clickable="true"
-    android:focusable="true">
+package com.noxdiscipline.service
 
-    <!-- Main punishment message -->
-    <TextView
-        android:id="@+id/txtPunishmentQuote"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_centerInParent="true"
-        android:layout_marginHorizontal="24dp"
-        android:fontFamily="@font/roboto_black"
-        android:gravity="center"
-        android:letterSpacing="0.1"
-        android:lineSpacing="8dp"
-        android:text="YOU ARE BEING CONTROLLED"
-        android:textColor="@android:color/white"
-        android:textSize="32sp"
-        android:textStyle="bold" />
+import android.app.Service
+import android.content.Intent
+import android.graphics.PixelFormat
+import android.os.IBinder
+import android.util.Log
+import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.WindowManager
+import android.widget.FrameLayout
+import android.widget.TextView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleService
+import androidx.lifecycle.MutableLiveData
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
-    <!-- Violating app display -->
-    <TextView
-        android:id="@+id/txtViolatingApp"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_above="@id/txtPunishmentQuote"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginBottom="32dp"
-        android:fontFamily="@font/roboto_medium"
-        android:gravity="center"
-        android:letterSpacing="0.15"
-        android:text="CAUGHT USING: APP NAME"
-        android:textColor="#FF4444"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+class NOXDisciplineService : LifecycleService() {
+    private var windowManager: WindowManager? = null
+    private var overlayView: FrameLayout? = null
+    private val serviceState = MutableLiveData<ServiceState>()
+    
+    companion object {
+        const val ACTION_START_SERVICE = "action_start_service"
+        const val ACTION_STOP_SERVICE = "action_stop_service"
+        const val USER_LOGIN = "noxdiscipline"  // Add user login here
+        const val SERVICE_START_TIME = "2025-07-12 03:10:29"  // Add current UTC time here
+        private const val TAG = "NOXDisciplineService"
+    }
 
-    <!-- Timer display -->
-    <TextView
-        android:id="@+id/txtTimer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/txtPunishmentQuote"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginTop="24dp"
-        android:fontFamily="@font/roboto_mono"
-        android:gravity="center"
-        android:letterSpacing="0.1"
-        android:text="PUNISHMENT ENDS IN: 10s"
-        android:textColor="#FF6666"
-        android:textSize="16sp"
-        android:textStyle="bold" />
+    enum class ServiceState {
+        RUNNING,
+        STOPPED
+    }
 
-    <!-- Camera preview for guilt mode -->
-    <ImageView
-        android:id="@+id/imgCameraPreview"
-        android:layout_width="300dp"
-        android:layout_height="300dp"
-        android:layout_centerHorizontal="true"
-        android:layout_below="@id/txtTimer"
-        android:layout_marginTop="24dp"
-        android:background="@drawable/camera_preview_border"
-        android:scaleType="centerCrop"
-        android:visibility="gone" />
+    override fun onCreate() {
+        super.onCreate()
+        Log.i(TAG, "Service created by $USER_LOGIN at $SERVICE_START_TIME")
+        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        setupOverlay()
+        serviceState.value = ServiceState.RUNNING
+    }
 
-    <!-- Bottom action buttons -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginBottom="48dp"
-        android:orientation="vertical"
-        android:gravity="center">
+    private fun setupOverlay() {
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP
+        }
 
-        <!-- Voice confession button -->
-        <Button
-            android:id="@+id/btnVoiceConfession"
-            android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:layout_marginBottom="16dp"
-            android:background="@drawable/nox_button_disabled"
-            android:enabled="false"
-            android:fontFamily="@font/roboto_bold"
-            android:letterSpacing="0.1"
-            android:text="🎤 VOICE CONFESSION"
-            android:text
+        overlayView = FrameLayout(this).apply {
+            LayoutInflater.from(this@NOXDisciplineService)
+                .inflate(R.layout.overlay_layout, this, true)
+        }
+
+        // Update overlay with user and time information
+        overlayView?.let {
+            val statusText = it.findViewById<TextView>(R.id.statusText)
+            statusText.text = "Service Active - Started by $USER_LOGIN\nLast Update: $SERVICE_START_TIME"
+        }
+
+        windowManager?.addView(overlayView, params)
+    }
+
+    private fun startOverlayService() {
+        Log.i(TAG, "Service starting by $USER_LOGIN at $SERVICE_START_TIME")
+        if (overlayView == null) {
+            setupOverlay()
+        }
+        serviceState.value = ServiceState.RUNNING
+    }
+
+    private fun stopOverlayService() {
+        Log.i(TAG, "Service stopping by $USER_LOGIN at $SERVICE_START_TIME")
+        overlayView?.let {
+            windowManager?.removeView(it)
+            overlayView = null
+        }
+        serviceState.value = ServiceState.STOPPED
+        stopSelf()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
+        Log.i(TAG, "Service command received by $USER_LOGIN at $SERVICE_START_TIME")
+        when (intent?.action) {
+            ACTION_START_SERVICE -> startOverlayService()
+            ACTION_STOP_SERVICE -> stopOverlayService()
+        }
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        Log.i(TAG, "Service destroyed by $USER_LOGIN at $SERVICE_START_TIME")
+        stopOverlayService()
+        super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent): IBinder? {
+        Log.i(TAG, "Service bound by $USER_LOGIN at $SERVICE_START_TIME")
+        super.onBind(intent)
+        return null
+    }
+}
